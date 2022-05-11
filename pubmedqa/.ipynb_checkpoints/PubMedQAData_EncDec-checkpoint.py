@@ -10,6 +10,7 @@ from random import shuffle
 import json
 from transformers import AutoTokenizer
 from sklearn.model_selection import train_test_split
+from functools import partial
 
 
 class QADataLoader():
@@ -55,46 +56,61 @@ class QADataLoader():
         self.num_classes = self.get_num_classes(self.label2id)
 
         # STEP 3: define tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)#, TOKENIZERS_PARALLELISM=False)
+        self.source_tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)#, TOKENIZERS_PARALLELISM=False)
+        self.target_tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)#, TOKENIZERS_PARALLELISM=False)
 
         # STEP 4: tokenize dataset
         self.dataset_train = QADataset(
             list_data=data['train'] if not debug else data['train'][0:debug_size],
-            tokenizer=self.tokenizer,
+            source_tokenizer=self.source_tokenizer,
+            target_tokenizer=self.target_tokenizer,
             label2id=self.label2id,
             max_length=max_sequence_length
         )
         self.dataset_test = QADataset(
             list_data=data['test'] if not debug else data['test'][0:debug_size],
-            tokenizer=self.tokenizer,
+            source_tokenizer=self.source_tokenizer,
+            target_tokenizer=self.target_tokenizer,
             label2id=self.label2id,
             max_length=max_sequence_length
         )
         self.dataset_validation = QADataset(
             list_data=data['validation'] if not debug else data['validation'][0:debug_size],
-            tokenizer=self.tokenizer,
+            source_tokenizer=self.source_tokenizer,
+            target_tokenizer=self.target_tokenizer,
             label2id=self.label2id,
             max_length=max_sequence_length
         )
+        
+        # define collation function
+        collation_wrapper = partial(
+            self.collation_f,
+            source_pad_token_id=self.source_tokenizer.pad_token_id,
+            target_pad_token_id=self.target_tokenizer.pad_token_id,
+        )
+        
 
         # STEP 5: get dataloaders for training and testing
         self.dataloader_train = DataLoader(
             self.dataset_train,
             batch_size=batch_size,
             shuffle=True,
-            num_workers=0
+            num_workers=0,
+            collate_fn=collation_wrapper,
         )
         self.dataloader_test = DataLoader(
             self.dataset_test,
             batch_size=batch_size,
             shuffle=False,
-            num_workers=0
+            num_workers=0,
+            collate_fn=collation_wrapper,
         )
         self.dataloader_validation = DataLoader(
             self.dataset_validation,
             batch_size=batch_size,
             shuffle=False,
-            num_workers=0
+            num_workers=0,
+            collate_fn=collation_wrapper,
         )
 
         return
@@ -130,19 +146,74 @@ class QADataLoader():
 
     def get_list_data(
             self,
-            dict_data: dict
+            dict_data_: dict
     ):
 
         list_data = []
-        for idx in range(len(dict_data['question'])):
+        for idx in range(len(dict_data_['question'])):
+
+            # try extracting final decision
+            try:
+                final_decision = dict_data_['final_decision'][idx]
+            except:
+                final_decision = 'no label'
+
+            # create data instance
             instance = {
-                'sentence1': dict_data['question'][idx],
-                'sentence2': ''.join(dict_data['context'][idx]['contexts']),
-                'gold_label': dict_data['final_decision'][idx]
+                'source_question': dict_data_['question'][idx],
+                'source_context': ''.join(dict_data_['context'][idx]['contexts']),
+                'target_answer': dict_data_['long_answer'][idx],
+                'gold_label': final_decision,
             }
             list_data.append(instance)
 
         return list_data
+    
+    def collation_f(
+        self,
+        batch,
+        source_pad_token_id, 
+        target_pad_token_id,
+    ):
+        
+        input_ids_list = [ex["input_ids"] for ex in batch]
+        decoder_input_ids_list = [ex["decoder_input_ids"] for ex in batch]
+        decoder_labels_list = [ex["decoder_labels"] for ex in batch]
+        encoder_label_list = [ex['gold_label'] for ex in batch]
+
+        collated_batch = {
+            "input_ids": self.pad(input_ids_list, source_pad_token_id),
+            "encoder_labels": torch.LongTensor(encoder_label_list).flatten(end_dim=1),
+            "decoder_input_ids": self.pad(decoder_input_ids_list, target_pad_token_id),
+            "decoder_labels": self.pad(decoder_labels_list, target_pad_token_id),
+
+        }
+        collated_batch["attention_mask"] = collated_batch["input_ids"] != source_pad_token_id
+
+        return collated_batch 
+    
+    def pad(
+        self,
+        sequence_list, 
+        pad_id
+    ):
+        """Pads sequence_list to the longest sequence in the batch with pad_id.
+
+        Args:
+            sequence_list: a list of size batch_size of numpy arrays of different length
+            pad_id: int, a pad token id
+
+        Returns:
+            torch.LongTensor of shape [batch_size, max_sequence_len]
+        """
+        max_len = max(len(x) for x in sequence_list)
+        padded_sequence_list = []
+        for sequence in sequence_list:
+            padding = [pad_id] * (max_len - len(sequence))
+            padded_sequence = sequence + padding
+            padded_sequence_list.append(padded_sequence)
+
+        return torch.LongTensor(padded_sequence_list)
 
 
 class QADataset(Dataset):
@@ -151,17 +222,19 @@ class QADataset(Dataset):
     def __init__(
             self,
             list_data: list,
-            tokenizer,
+            source_tokenizer,
+            target_tokenizer,
             max_length: int,
             label2id: dict,
     ):
 
-        self.tokenizer = tokenizer
+        self.source_tokenizer = source_tokenizer
+        self.target_tokenizer = target_tokenizer
         self.label2id = label2id
         self.max_length = max_length
         self.data = list_data
-        self.pad_token = self.tokenizer.vocab[self.tokenizer._pad_token]
-        self.pad_token_id = self.tokenizer.pad_token_id
+        #self.pad_token = self.tokenizer.vocab[self.tokenizer._pad_token]
+        #self.pad_token_id = self.tokenizer.pad_token_id
 
     def __len__(self):
         """Return length of dataset."""
@@ -169,61 +242,31 @@ class QADataset(Dataset):
 
     def __getitem__(self, i):
         """Return sample from dataset at index i."""
+        
         example = self.data[i]
-        inputs = self.tokenizer.encode_plus(
-            example['sentence1'],
-            example['sentence2'],
+        inputs = self.source_tokenizer.encode_plus(
+            example['source_question'],
+            example['source_context'],
             add_special_tokens=True,
             truncation='only_second',
-            max_length=self.max_length,
-            padding='max_length',
+            max_length=self.max_length
         )
+        targets = self.target_tokenizer.encode_plus(
+            example['target_answer'],
+            add_special_tokens=True,
+            truncation=True,
+            max_length=self.max_length
+        )
+        targets['decoder_labels'] = targets['input_ids'][1:] + [self.target_tokenizer.pad_token_id]
 
-        #
-        #input_ids = [self.pad_token_id] * self.max_length
-        #input_ids[:len(inputs['input_ids'])] = inputs['input_ids']
-        input_ids = inputs['input_ids']
-        attention_mask = [1] * len(input_ids)
-        for tok_idx, tok_id in enumerate(input_ids):
-            if tok_id == self.pad_token_id:
-                break
-        attention_mask[tok_idx:] = [0] * (self.max_length - tok_idx)
-            
-        
-        #
-        """
-        input_ids = input_ids[:self.max_length]
-        
-        padding_length = self.max_length - len(input_ids)
-        input_ids = input_ids + ([self.pad_token] * padding_length)
-        attention_mask = attention_mask + ([0] * padding_length)
-        
-        if 'token_type_ids' in inputs:
-            token_type_ids = inputs["token_type_ids"]
-            token_type_ids = token_type_ids[:self.max_length]
-            token_type_ids = token_type_ids + ([self.tokenizer._pad_token] * padding_length)
-        
-        """
-        
-
-        assert len(input_ids) == self.max_length, "Error with input length {} vs {}".format(len(input_ids),
-                                                                                            self.max_length)
-        assert len(attention_mask) == self.max_length, "Error with input length {} vs {}".format(len(attention_mask),
-                                                                                                 self.max_length)
-
-        label = self.label2id[example['gold_label']]
         return_dict = {
-            'input_ids': torch.LongTensor(input_ids),
-            'attention_mask': torch.LongTensor(attention_mask),
-            'label': torch.LongTensor([label])
+            'input_ids': inputs['input_ids'],
+            'attention_mask': inputs['attention_mask'],
+            'decoder_input_ids': targets['input_ids'],
+            'decoder_labels': targets['decoder_labels'],
+            'decoder_attention_mask': targets['attention_mask'],
+            'gold_label': [self.label2id[example['gold_label']]],
         }
-        
-        """
-        if 'token_type_ids' in inputs:
-            assert len(token_type_ids) == self.max_length, "Error with input length {} vs {}".format(
-                len(token_type_ids), self.max_length)
-            return_dict['token_type_ids'] = torch.LongTensor(token_type_ids)
-        """
         
 
         return return_dict

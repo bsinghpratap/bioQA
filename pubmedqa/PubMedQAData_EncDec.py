@@ -36,9 +36,9 @@ class QADataLoader():
                 data = json.load(f)
         else:
             data = datasets.load_dataset(datasets_name, datasets_config)
-        data = self.get_splits(data)
         for split in data:
             data[split] = self.get_list_data(data[split])
+        data = self.get_splits(data)
 
         # STEP 2: in addition to data, we need label maps i.e. a dict to convert
         # label text to an integer and an integer back to it's class text
@@ -137,10 +137,19 @@ class QADataLoader():
             data_in
     ):
         data_out = {}
-        data_train, data_test = train_test_split(data_in['train'])
+        data_train, data_test = train_test_split(
+            data_in['train'],
+            test_size=0.5,
+            random_state=1,
+        )
+        data_test, data_val = train_test_split(
+            data_test,
+            test_size=0.5,
+            random_state=1
+        )
         data_out['train'] = data_train
         data_out['test'] = data_test
-        data_out['validation'] = data_test
+        data_out['validation'] = data_val
 
         return data_out
 

@@ -157,15 +157,16 @@ class QADataLoader():
                 final_decision = dict_data_['final_decision'][idx]
             except:
                 final_decision = 'no label'
-
-            # create data instance
-            instance = {
-                'source_question': dict_data_['question'][idx],
-                'source_context': ''.join(dict_data_['context'][idx]['contexts']),
-                'target_answer': dict_data_['long_answer'][idx],
-                'gold_label': final_decision,
-            }
-            list_data.append(instance)
+            
+            if not final_decision in ['no label', 'maybe']:
+                # create data instance
+                instance = {
+                    'source_question': dict_data_['question'][idx],
+                    'source_context': ''.join(dict_data_['context'][idx]['contexts']),
+                    'target_answer': dict_data_['long_answer'][idx],
+                    'gold_label': final_decision,
+                }
+                list_data.append(instance)
 
         return list_data
     
@@ -206,7 +207,7 @@ class QADataLoader():
         Returns:
             torch.LongTensor of shape [batch_size, max_sequence_len]
         """
-        max_len = max(len(x) for x in sequence_list)
+        max_len = 512#max(len(x) for x in sequence_list)
         padded_sequence_list = []
         for sequence in sequence_list:
             padding = [pad_id] * (max_len - len(sequence))

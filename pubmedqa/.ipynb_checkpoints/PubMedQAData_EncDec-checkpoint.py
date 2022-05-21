@@ -20,7 +20,7 @@ class QADataLoader():
             self,
             datasets_name: str = None,
             datasets_config: str = None,
-            filepath_data: str = '',
+            filepath_data: str = r'./ori_pqau.json',
             label2id: dict = None,
             filepath_label2id: str = 'label2id.json',
             tokenizer_name: str = 'bert-base-uncased',
@@ -34,17 +34,20 @@ class QADataLoader():
         # STEP 1: read data and convert to list_of_dict format
         if datasets_name is None and datasets_config is None:
             with open(filepath_data, 'r') as f:
-                data = json.load(f)
+                data = {'train': json.load(f)}
         else:
             data = datasets.load_dataset(datasets_name, datasets_config)
+        #
         for split in data:
-            data[split] = self.get_list_data(data[split])
+            #data[split] = self.get_list_data(data[split])
+            data[split] = self.get_list_data_file(data[split])
         
+        """
         # @TODO: remove following lines once done with creating artificial labels
         data_unl = datasets.load_dataset(datasets_name, 'pqa_unlabeled')
         for split in data_unl:
             data[split] += self.get_list_data(data_unl[split])
-        
+        """        
         #
         data = self.get_splits(data)
 
@@ -102,10 +105,12 @@ class QADataLoader():
         self.dataloader_train = DataLoader(
             self.dataset_train,
             batch_size=batch_size,
-            shuffle=True,
+            shuffle=False,
             num_workers=0,
             collate_fn=collation_wrapper,
         )
+        
+        """
         self.dataloader_test = DataLoader(
             self.dataset_test,
             batch_size=batch_size,
@@ -120,6 +125,8 @@ class QADataLoader():
             num_workers=0,
             collate_fn=collation_wrapper,
         )
+        """
+        
 
         return
 
@@ -142,13 +149,19 @@ class QADataLoader():
 
     def get_splits(
             self,
-            data_in
+            data_in,
+            no_split=False
     ):
+        if no_split:
+            data_in['test'] = []
+            data_in['validation'] = []
+            return data_in
+        
+        #
         data_out = {}
-        # @TODO: change 0.99 to 0.5 once done with creating artificial labels
         data_train, data_test = train_test_split(
             data_in['train'],
-            test_size=0.99,
+            test_size=0.01,
             random_state=1,
         )
         data_test, data_val = train_test_split(
@@ -161,6 +174,30 @@ class QADataLoader():
         data_out['validation'] = data_val
 
         return data_out
+    
+    def get_list_data_file(
+        self,
+        dict_data_,
+    ):
+        #list_ = list(dict_data.values())
+        list_data = []
+        for idx, id_ in tqdm(enumerate(dict_data_)):
+            
+            # try extracting final decision
+            try:
+                final_decision = dict_data_[id_]['final_decision']
+            except:
+                final_decision = 'maybe' # this is just an adjustment, we do not use these 'maybe' labels
+            
+            instance = {
+                'source_question': dict_data_[id_]['QUESTION'],
+                'source_context': ' '.join(dict_data_[id_]['CONTEXTS']),
+                'target_answer': dict_data_[id_]['LONG_ANSWER'],
+                'gold_label': final_decision,
+            }
+            list_data.append(instance)
+        
+        return list_data
 
     def get_list_data(
             self,
@@ -180,7 +217,7 @@ class QADataLoader():
             # create data instance
             instance = {
                 'source_question': dict_data_['question'][idx],
-                'source_context': ''.join(dict_data_['context'][idx]['contexts']),
+                'source_context': ' '.join(dict_data_['context'][idx]['contexts']),
                 'target_answer': dict_data_['long_answer'][idx],
                 'gold_label': final_decision,
             }

@@ -39,8 +39,8 @@ class QADataLoader():
             data = datasets.load_dataset(datasets_name, datasets_config)
         #
         for split in data:
-            #data[split] = self.get_list_data(data[split])
-            data[split] = self.get_list_data_file(data[split])
+            data[split] = self.get_list_data(data[split])
+            #data[split] = self.get_list_data_file(data[split])
         
         """
         # @TODO: remove following lines once done with creating artificial labels

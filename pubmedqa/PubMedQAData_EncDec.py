@@ -39,8 +39,8 @@ class QADataLoader():
             data = datasets.load_dataset(datasets_name, datasets_config)
         #
         for split in data:
-            data[split] = self.get_list_data(data[split])
-            #data[split] = self.get_list_data_file(data[split])
+            #data[split] = self.get_list_data(data[split])
+            data[split] = self.get_list_data_file(data[split])
         
         """
         # @TODO: remove following lines once done with creating artificial labels
@@ -194,6 +194,7 @@ class QADataLoader():
                 'source_context': ' '.join(dict_data_[id_]['CONTEXTS']),
                 'target_answer': dict_data_[id_]['LONG_ANSWER'],
                 'gold_label': final_decision,
+                'id': id_,
             }
             list_data.append(instance)
         
@@ -251,6 +252,7 @@ class QADataLoader():
         decoder_attention_mask_list = [ex["decoder_attention_mask"] for ex in batch]
         decoder_labels_list = [ex["decoder_labels"] for ex in batch]
         encoder_label_list = [ex['gold_label'][0] for ex in batch]
+        ids_ = [ex['id'][0] for ex in batch]
 
         collated_batch = {
             "input_ids": self.pad(input_ids_list, source_pad_token_id),
@@ -259,7 +261,7 @@ class QADataLoader():
             "decoder_input_ids": self.pad(decoder_input_ids_list, target_pad_token_id),
             "decoder_attention_mask": self.pad(decoder_attention_mask_list, target_pad_token_id),
             "decoder_labels": self.pad(decoder_labels_list, target_pad_token_id),
-
+            "ids": torch.LongTensor(ids_),
         }
         collated_batch["attention_mask"] = collated_batch["input_ids"] != source_pad_token_id
 
@@ -348,6 +350,12 @@ class QADataset(Dataset):
         decoder_attention_mask[tok_idx:] = [0] * (self.max_length - tok_idx)
         
         #
+        if 'id' in example:
+            id_ = int(example['id'])
+        else:
+            id_ = -1
+        
+        #
         return_dict = {
             'input_ids': inputs['input_ids'],
             'attention_mask': attention_mask,
@@ -355,6 +363,7 @@ class QADataset(Dataset):
             'decoder_labels': targets['decoder_labels'],
             'decoder_attention_mask': decoder_attention_mask,
             'gold_label': [self.label2id[example['gold_label']]],
+            'id': [id_],
         }
         
 

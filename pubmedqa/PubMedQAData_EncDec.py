@@ -11,6 +11,7 @@ import json
 from transformers import AutoTokenizer
 from sklearn.model_selection import train_test_split
 from functools import partial
+from tqdm import tqdm
 
 
 class QADataLoader():
@@ -38,6 +39,13 @@ class QADataLoader():
             data = datasets.load_dataset(datasets_name, datasets_config)
         for split in data:
             data[split] = self.get_list_data(data[split])
+        
+        # @TODO: remove following lines once done with creating artificial labels
+        data_unl = datasets.load_dataset(datasets_name, 'pqa_unlabeled')
+        for split in data_unl:
+            data[split] += self.get_list_data(data_unl[split])
+        
+        #
         data = self.get_splits(data)
 
         # STEP 2: in addition to data, we need label maps i.e. a dict to convert
@@ -137,9 +145,10 @@ class QADataLoader():
             data_in
     ):
         data_out = {}
+        # @TODO: change 0.99 to 0.5 once done with creating artificial labels
         data_train, data_test = train_test_split(
             data_in['train'],
-            test_size=0.5,
+            test_size=0.99,
             random_state=1,
         )
         data_test, data_val = train_test_split(
@@ -159,14 +168,25 @@ class QADataLoader():
     ):
 
         list_data = []
-        for idx in range(len(dict_data_['question'])):
+        for idx in tqdm(range(len(dict_data_['question']))):
 
             # try extracting final decision
             try:
                 final_decision = dict_data_['final_decision'][idx]
             except:
-                final_decision = 'no label'
+                final_decision = 'maybe' # this is just an adjustment, we do not use these 'maybe' labels
+
             
+            # create data instance
+            instance = {
+                'source_question': dict_data_['question'][idx],
+                'source_context': ''.join(dict_data_['context'][idx]['contexts']),
+                'target_answer': dict_data_['long_answer'][idx],
+                'gold_label': final_decision,
+            }
+            list_data.append(instance)
+            
+            """
             if not final_decision in ['no label', 'maybe']:
                 # create data instance
                 instance = {
@@ -176,6 +196,8 @@ class QADataLoader():
                     'gold_label': final_decision,
                 }
                 list_data.append(instance)
+            """
+            
 
         return list_data
     
@@ -187,14 +209,18 @@ class QADataLoader():
     ):
         
         input_ids_list = [ex["input_ids"] for ex in batch]
+        attention_mask_list = [ex["attention_mask"] for ex in batch]
         decoder_input_ids_list = [ex["decoder_input_ids"] for ex in batch]
+        decoder_attention_mask_list = [ex["decoder_attention_mask"] for ex in batch]
         decoder_labels_list = [ex["decoder_labels"] for ex in batch]
-        encoder_label_list = [ex['gold_label'] for ex in batch]
+        encoder_label_list = [ex['gold_label'][0] for ex in batch]
 
         collated_batch = {
             "input_ids": self.pad(input_ids_list, source_pad_token_id),
-            "encoder_labels": torch.LongTensor(encoder_label_list).flatten(end_dim=1),
+            "attention_mask": self.pad(attention_mask_list, source_pad_token_id),
+            "encoder_labels": torch.LongTensor(encoder_label_list),
             "decoder_input_ids": self.pad(decoder_input_ids_list, target_pad_token_id),
+            "decoder_attention_mask": self.pad(decoder_attention_mask_list, target_pad_token_id),
             "decoder_labels": self.pad(decoder_labels_list, target_pad_token_id),
 
         }
@@ -244,7 +270,8 @@ class QADataset(Dataset):
         self.max_length = max_length
         self.data = list_data
         #self.pad_token = self.tokenizer.vocab[self.tokenizer._pad_token]
-        #self.pad_token_id = self.tokenizer.pad_token_id
+        self.source_pad_token_id = self.source_tokenizer.pad_token_id
+        self.target_pad_token_id = self.target_tokenizer.pad_token_id
 
     def __len__(self):
         """Return length of dataset."""
@@ -254,6 +281,8 @@ class QADataset(Dataset):
         """Return sample from dataset at index i."""
         
         example = self.data[i]
+        
+        # source sequence
         inputs = self.source_tokenizer.encode_plus(
             example['source_question'],
             example['source_context'],
@@ -261,6 +290,13 @@ class QADataset(Dataset):
             truncation='only_second',
             max_length=self.max_length
         )
+        attention_mask = [1] * len(inputs['input_ids'])
+        for tok_idx, tok_id in enumerate(inputs['input_ids']):
+            if tok_id == self.source_pad_token_id:
+                break
+        attention_mask[tok_idx:] = [0] * (self.max_length - tok_idx)
+        
+        # target sequence
         targets = self.target_tokenizer.encode_plus(
             example['target_answer'],
             add_special_tokens=True,
@@ -268,13 +304,19 @@ class QADataset(Dataset):
             max_length=self.max_length
         )
         targets['decoder_labels'] = targets['input_ids'][1:] + [self.target_tokenizer.pad_token_id]
-
+        decoder_attention_mask = [1] * len(targets['input_ids'])
+        for tok_idx, tok_id in enumerate(targets['input_ids']):
+            if tok_id == self.target_pad_token_id:
+                break
+        decoder_attention_mask[tok_idx:] = [0] * (self.max_length - tok_idx)
+        
+        #
         return_dict = {
             'input_ids': inputs['input_ids'],
-            'attention_mask': inputs['attention_mask'],
+            'attention_mask': attention_mask,
             'decoder_input_ids': targets['input_ids'],
             'decoder_labels': targets['decoder_labels'],
-            'decoder_attention_mask': targets['attention_mask'],
+            'decoder_attention_mask': decoder_attention_mask,
             'gold_label': [self.label2id[example['gold_label']]],
         }
         

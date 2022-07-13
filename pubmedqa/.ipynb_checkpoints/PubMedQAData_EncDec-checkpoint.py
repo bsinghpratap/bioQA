@@ -36,11 +36,18 @@ class QADataLoader():
             with open(filepath_data, 'r') as f:
                 data = {'train': json.load(f)}
         else:
-            data = datasets.load_dataset(datasets_name, datasets_config)
+            data = {}
+            with open('train_set.json', 'r') as f:
+                data['train'] = json.load(f)
+            with open('dev_set.json', 'r') as f:
+                data['validation'] = json.load(f)
+            with open('test_set.json', 'r') as f:
+                data['test'] = json.load(f)
+            
         #
         for split in data:
-            data[split] = self.get_list_data(data[split])
-            #data[split] = self.get_list_data_file(data[split])
+            #data[split] = self.get_list_data(data[split])
+            data[split] = self.get_list_data_file(data[split])
         
         """
         # @TODO: remove following lines once done with creating artificial labels
@@ -49,7 +56,9 @@ class QADataLoader():
             data[split] += self.get_list_data(data_unl[split])
         """        
         #
-        data = self.get_splits(data)
+        if ('test' not in data) or ('validation' not in data):
+            data = self.get_splits(data)
+        data['train'] = self.oversample(data['train'], {'no': 1, 'maybe': 2, 'yes': 1})
 
         # STEP 2: in addition to data, we need label maps i.e. a dict to convert
         # label text to an integer and an integer back to it's class text
@@ -109,8 +118,6 @@ class QADataLoader():
             num_workers=0,
             collate_fn=collation_wrapper,
         )
-        
-        """
         self.dataloader_test = DataLoader(
             self.dataset_test,
             batch_size=batch_size,
@@ -125,10 +132,22 @@ class QADataLoader():
             num_workers=0,
             collate_fn=collation_wrapper,
         )
-        """
         
 
         return
+    
+    def oversample(self, data_in, class_multi):
+        
+        data_out = []
+        for instance in data_in:
+            i_ = 0
+            while i_ < class_multi[instance['gold_label']]:
+                data_out.append(instance)
+                i_ += 1
+        #
+        random.shuffle(data_out)
+        
+        return data_out
 
     def get_id2label(
             self,
@@ -161,7 +180,7 @@ class QADataLoader():
         data_out = {}
         data_train, data_test = train_test_split(
             data_in['train'],
-            test_size=0.01,
+            test_size=0.05,
             random_state=1,
         )
         data_test, data_val = train_test_split(
@@ -183,21 +202,33 @@ class QADataLoader():
         list_data = []
         for idx, id_ in tqdm(enumerate(dict_data_)):
             
+            if not dict_data_[id_]['final_decision'] == '':
+                instance = {
+                    'source_question': dict_data_[id_]['QUESTION'],
+                    'source_context': ' '.join(dict_data_[id_]['CONTEXTS']),
+                    'target_answer': dict_data_[id_]['LONG_ANSWER'],
+                    'gold_label': dict_data_[id_]['final_decision'], #dict_data_[id_]['custom_label'],
+                    'id': id_,
+                }
+                list_data.append(instance)
+            """
+                
             # try extracting final decision
             try:
-                final_decision = dict_data_[id_]['final_decision']
+                final_decision = dict_data_[id_]['custom_label']
+                if not final_decision == '':
+                    instance = {
+                        'source_question': dict_data_[id_]['QUESTION'],
+                        'source_context': ' '.join(dict_data_[id_]['CONTEXTS']),
+                        'target_answer': dict_data_[id_]['LONG_ANSWER'],
+                        'gold_label': final_decision,
+                        'id': id_,
+                    }
+                    list_data.append(instance)
             except:
-                final_decision = 'maybe' # this is just an adjustment, we do not use these 'maybe' labels
+                continue
+            """
             
-            instance = {
-                'source_question': dict_data_[id_]['QUESTION'],
-                'source_context': ' '.join(dict_data_[id_]['CONTEXTS']),
-                'target_answer': dict_data_[id_]['LONG_ANSWER'],
-                'gold_label': final_decision,
-                'id': id_,
-            }
-            list_data.append(instance)
-        
         return list_data
 
     def get_list_data(
@@ -211,18 +242,17 @@ class QADataLoader():
             # try extracting final decision
             try:
                 final_decision = dict_data_['final_decision'][idx]
+                # create data instance
+                instance = {
+                    'source_question': dict_data_['question'][idx],
+                    'source_context': ' '.join(dict_data_['context'][idx]['contexts']),
+                    'target_answer': dict_data_['long_answer'][idx],
+                    'gold_label': final_decision,
+                }
+                list_data.append(instance)
+                
             except:
-                final_decision = 'maybe' # this is just an adjustment, we do not use these 'maybe' labels
-
-            
-            # create data instance
-            instance = {
-                'source_question': dict_data_['question'][idx],
-                'source_context': ' '.join(dict_data_['context'][idx]['contexts']),
-                'target_answer': dict_data_['long_answer'][idx],
-                'gold_label': final_decision,
-            }
-            list_data.append(instance)
+                continue
             
             """
             if not final_decision in ['no label', 'maybe']:
@@ -245,13 +275,17 @@ class QADataLoader():
         source_pad_token_id, 
         target_pad_token_id,
     ):
-        
+        # enc
         input_ids_list = [ex["input_ids"] for ex in batch]
         attention_mask_list = [ex["attention_mask"] for ex in batch]
+        encoder_label_list = [ex['encoder_label'][0] for ex in batch]
+        
+        # dec
         decoder_input_ids_list = [ex["decoder_input_ids"] for ex in batch]
         decoder_attention_mask_list = [ex["decoder_attention_mask"] for ex in batch]
         decoder_labels_list = [ex["decoder_labels"] for ex in batch]
-        encoder_label_list = [ex['gold_label'][0] for ex in batch]
+        
+        #
         ids_ = [ex['id'][0] for ex in batch]
 
         collated_batch = {
@@ -323,10 +357,10 @@ class QADataset(Dataset):
         
         # source sequence
         inputs = self.source_tokenizer.encode_plus(
-            example['source_question'],
             example['source_context'],
+            example['source_question'],
             add_special_tokens=True,
-            truncation='only_second',
+            truncation='only_first',
             max_length=self.max_length
         )
         attention_mask = [1] * len(inputs['input_ids'])
@@ -349,6 +383,15 @@ class QADataset(Dataset):
                 break
         decoder_attention_mask[tok_idx:] = [0] * (self.max_length - tok_idx)
         
+        # target label
+        target_label = self.target_tokenizer.encode_plus(
+            example['gold_label'],
+            add_special_tokens=True,
+            truncation=True,
+            max_length=self.max_length
+        )
+        label = target_label['input_ids'][1:] + [self.target_tokenizer.pad_token_id]
+        
         #
         if 'id' in example:
             id_ = int(example['id'])
@@ -360,9 +403,9 @@ class QADataset(Dataset):
             'input_ids': inputs['input_ids'],
             'attention_mask': attention_mask,
             'decoder_input_ids': targets['input_ids'],
-            'decoder_labels': targets['decoder_labels'],
+            'decoder_labels': label,#targets['decoder_labels'],
             'decoder_attention_mask': decoder_attention_mask,
-            'gold_label': [self.label2id[example['gold_label']]],
+            'encoder_label': [self.label2id[example['gold_label']]],
             'id': [id_],
         }
         

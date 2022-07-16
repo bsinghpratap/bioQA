@@ -162,6 +162,13 @@ def init_training(
     args.fold_idx = fold_idx
 
     #
+    print("\n")
+    print("=" * 30)
+    print(f"\nStarting training {training_phase} model")
+    print("=" * 30)
+    print("\n")
+
+    #
     run = wandb.init(
         project=args.wandb_project,
         config=args
@@ -175,7 +182,7 @@ def init_training(
         fixed_seed_value=args.fixed_seed_value,
         label2id=None,
         tokenizer_name=args.tokenizer_name,
-        batch_size=args.batch_size,
+        batch_size=args.batch_size if training_phase in ["phase-1", "phase-3"] else 32,
         debug=args.debug,
     )
 
@@ -226,13 +233,21 @@ def init_training(
         model_name=args.model_name,
         optimizer=optimizer,
         scheduler=scheduler,
-        num_epochs=args.num_epochs,
+        num_epochs=args.num_epochs if training_phase in ["phase-1", "phase-3"] else 2,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         eval_every_steps=args.eval_every_steps,
         path_models=args.path_models,
         device=args.device,
         label2id=dataloaders.label2id,
+        debug=args.debug,
     )
+
+    #
+    print("\n")
+    print("=" * 30)
+    print(f"\nStarting testing of {training_phase} model")
+    print("=" * 30)
+    print("\n")
 
     # test
     best_test_result = trainer.test_(
@@ -254,6 +269,13 @@ def init_training(
 
     #
     if training_phase == "phase-2":
+        print("\n")
+        print("=" * 30)
+        print(f"\nTesting phase-2 model on manually labeled test set")
+        print("=" * 30)
+        print("\n")
+
+        #
         dataloaders = QADataLoader(
             training_phase="phase-1",
             fold_idx=args.fold_idx,
@@ -287,6 +309,12 @@ def init_training(
 
     #
     if training_phase == "phase-1":
+        print("\n")
+        print("=" * 30)
+        print(f"\nStarting data annotation with model developed in phase-1")
+        print("=" * 30)
+        print("\n")
+
         dataloaders = QADataLoader(
             training_phase="annotation",
             fold_idx=args.fold_idx,
@@ -310,7 +338,20 @@ def init_training(
             model=model,
             loader=dataloaders.dataloader_train,
             device=args.device,
+            debug=args.debug,
         )
+        with open(os.path.join(args.path_models, f'ditribution_of_annotated_data_{fold_idx}.json'), 'w') as f:
+            json.dump(dist_class, f, indent=4)
+
+        #
+        print("\n")
+        print("="*30)
+        print(f"\nDistribution of artificially labeled data is: \n{dist_class}")
+        print(f"\nSaving model annotated data")
+        print("=" * 30)
+        print('\n')
+
+        #
         utils_f.save_model_labeled_data(
             path_data=args.path_data,
             fold_idx=args.fold_idx,
@@ -350,6 +391,11 @@ def main():
 
     #
     for fold in selected_folds:
+        print("\n")
+        print("=" * 30)
+        print(f"\nStarting sequential training with the fold{fold} version of labeled data")
+        print("=" * 30)
+        print("\n")
         args.fold_idx = fold
 
         # phase-1

@@ -135,6 +135,7 @@ def train_(
         path_models,
         device,
         label2id,
+        debug,
 ):
     # train
     best_model = None
@@ -235,10 +236,8 @@ def train_(
                         os.path.join(path_models, f"{model_name.replace('/', '-')}_{training_phase}_fold{fold_idx}.pt")
                     )
 
-                #
-                # if val_results['metrics']['2']['precision'] >= 0.5:
-                #    # save model
-                #    torch.save(model.state_dict(), os.path.join(args['output_dir'],  model_name+'_maybe.pt'))
+        if debug and (each_epoch > 3):
+            break
 
     # load the best model
     model.load_state_dict(
@@ -255,6 +254,7 @@ def label_data(
         model,
         loader,
         device,
+        debug,
 
 ):
     model.eval()
@@ -282,8 +282,8 @@ def label_data(
             for id_idx, id_ in enumerate(ids_):
                 dict_results[str(id_)] = {'custom_label': preds[id_idx]}
 
-            # @TODO: delete this after debugging
-            if batch_idx > 5:
+            #
+            if debug and (batch_idx > 3):
                 break
 
     # get distribution of predicted labels

@@ -1,5 +1,3 @@
-import os.path
-
 import torch
 import random
 from torch.utils.data import Dataset
@@ -20,11 +18,11 @@ class QADataLoader():
 
     def __init__(
             self,
-            training_phase: str,
-            fold_idx: int,
-            path_data: str,
-            fixed_seed_value: int,
+            datasets_name: str = None,
+            datasets_config: str = None,
+            filepath_data: str = r'./ori_pqaa.json',
             label2id: dict = None,
+            filepath_label2id: str = 'label2id.json',
             tokenizer_name: str = 'bert-base-uncased',
             max_sequence_length: int = 512,
             batch_size: int = 16,
@@ -34,52 +32,51 @@ class QADataLoader():
         """This class saves dataloader of each split as attributes"""
 
         # STEP 1: read data and convert to list_of_dict format
-        if training_phase in ['phase-1', 'phase-3']:
-            path_read = os.path.join(path_data, f'pqal_fold{fold_idx}')
-
-            data = {}
-            with open(os.path.join(path_read, 'train_set.json'), 'r') as f:
-                data['train'] = json.load(f)
-            with open(os.path.join(path_read, 'dev_set.json'), 'r') as f:
-                data['validation'] = json.load(f)
-            with open(os.path.join(path_data, 'test_set.json'), 'r') as f:
-                data['test'] = json.load(f)
-
-        elif training_phase == "annotation":
-
-            with open(os.path.join(path_data, 'ori_pqaa.json'), 'r') as f:
+        if datasets_name is None and datasets_config is None:
+            """
+            print('Reading unlabeled and artificially labeled subsets of the data')
+            with open(filepath_data, 'r') as f:
                 a_ = json.load(f)
-            with open(os.path.join(path_data, 'ori_pqau.json'), 'r') as f:
+            with open('ori_pqau.json', 'r') as f:
                 u_ = json.load(f)
             data = {'train': {**a_, **u_}}
-
-        elif training_phase == "phase-2":
-
-            with open(os.path.join(path_data, f'model_annotated_data_fold{fold_idx}.json'), 'r') as f:
+            print(f'length of artificially labled data: {len(a_)}')
+            print(f'length of unlabeled data: {len(u_)}')
+            t_set = data['train']
+            print(f'length of combined data: {len(t_set)}')
+            """
+            with open('model_labeled_data.json', 'r') as f:
                 data = {'train': json.load(f)}
-            
+        else:
+            data = {}
+            with open('train_set.json', 'r') as f:
+                data['train'] = json.load(f)
+            with open('dev_set.json', 'r') as f:
+                data['validation'] = json.load(f)
+            with open('test_set.json', 'r') as f:
+                data['test'] = json.load(f)
+
         #
         for split in data:
-            #data[split] = self.get_list_data(data[split])
-            data[split] = self.get_list_data_file(data[split], training_phase)
-        
+            # data[split] = self.get_list_data(data[split])
+            data[split] = self.get_list_data_file(data[split])
+
         """
         # @TODO: remove following lines once done with creating artificial labels
         data_unl = datasets.load_dataset(datasets_name, 'pqa_unlabeled')
         for split in data_unl:
             data[split] += self.get_list_data(data_unl[split])
-        """        
+        """
         #
         if ('test' not in data) or ('validation' not in data):
-            data = self.get_splits(data, fixed_seed_value, training_phase)
-
-        if not training_phase == 'annotation':
-            data['train'] = self.oversample(data['train'], {'no': 1, 'maybe': 2, 'yes': 1}, fixed_seed_value)
+            data = self.get_splits(data)
+        data['train'] = self.oversample(data['train'], {'no': 1, 'maybe': 2, 'yes': 1})
 
         # STEP 2: in addition to data, we need label maps i.e. a dict to convert
         # label text to an integer and an integer back to it's class text
         if label2id is None:
-            self.label2id = {'yes': 0, 'no': 1, 'maybe': 2}
+            with open(filepath_label2id, 'r') as f:
+                self.label2id = json.load(f)
         else:
             self.label2id = label2id
 
@@ -91,8 +88,8 @@ class QADataLoader():
         self.num_classes = self.get_num_classes(self.label2id)
 
         # STEP 3: define tokenizer
-        self.source_tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)#, TOKENIZERS_PARALLELISM=False)
-        self.target_tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)#, TOKENIZERS_PARALLELISM=False)
+        self.source_tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)  # , TOKENIZERS_PARALLELISM=False)
+        self.target_tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)  # , TOKENIZERS_PARALLELISM=False)
 
         # STEP 4: tokenize dataset
         self.dataset_train = QADataset(
@@ -116,14 +113,13 @@ class QADataLoader():
             label2id=self.label2id,
             max_length=max_sequence_length
         )
-        
+
         # define collation function
         collation_wrapper = partial(
             self.collation_f,
             source_pad_token_id=self.source_tokenizer.pad_token_id,
             target_pad_token_id=self.target_tokenizer.pad_token_id,
         )
-        
 
         # STEP 5: get dataloaders for training and testing
         self.dataloader_train = DataLoader(
@@ -147,17 +143,11 @@ class QADataLoader():
             num_workers=0,
             collate_fn=collation_wrapper,
         )
-        
 
         return
-    
-    def oversample(
-            self,
-            data_in,
-            class_multi,
-            fixed_seed_value,
-    ):
-        
+
+    def oversample(self, data_in, class_multi):
+
         data_out = []
         for instance in data_in:
             i_ = 0
@@ -165,9 +155,8 @@ class QADataLoader():
                 data_out.append(instance)
                 i_ += 1
         #
-        random.seed(fixed_seed_value)
         random.shuffle(data_out)
-        
+
         return data_out
 
     def get_id2label(
@@ -190,8 +179,6 @@ class QADataLoader():
     def get_splits(
             self,
             data_in,
-            fixed_seed_value,
-            training_phase,
             no_split=False
     ):
         if no_split:
@@ -199,66 +186,70 @@ class QADataLoader():
             data_in['validation'] = []
             return data_in
 
-        if training_phase == "annotation":
-            test_size = 0.001
-        elif training_phase == "phase-2":
-            test_size = 0.01
-        
         #
         data_out = {}
         data_train, data_test = train_test_split(
             data_in['train'],
-            test_size=test_size,
-            random_state=fixed_seed_value,
+            test_size=0.01,
+            random_state=1,
         )
         data_test, data_val = train_test_split(
             data_test,
             test_size=0.5,
-            random_state=fixed_seed_value
+            random_state=1
         )
         data_out['train'] = data_train
         data_out['test'] = data_test
         data_out['validation'] = data_val
 
         return data_out
-    
-    def get_list_data_file(
-        self,
-        dict_data_,
-        training_phase,
-    ):
 
+    def get_list_data_file(
+            self,
+            dict_data_,
+    ):
+        # list_ = list(dict_data.values())
         list_data = []
         for idx, id_ in enumerate(dict_data_):
 
-            instance = {
-                'source_question': dict_data_[id_]['QUESTION'],
-                'source_context': ' '.join(dict_data_[id_]['CONTEXTS']),
-                'target_answer': dict_data_[id_]['LONG_ANSWER'],
-                'id': id_,
-            }
+            if 'final_decision' in dict_data_[id_]:
+                if not dict_data_[id_]['final_decision'] == '':
+                    instance = {
+                        'source_question': dict_data_[id_]['QUESTION'],
+                        'source_context': ' '.join(dict_data_[id_]['CONTEXTS']),
+                        'target_answer': dict_data_[id_]['LONG_ANSWER'],
+                        'gold_label': dict_data_[id_]['final_decision'],  # dict_data_[id_]['custom_label'],
+                        'id': id_,
+                    }
+                    list_data.append(instance)
+            """
+            else:
+                instance = {
+                    'source_question': dict_data_[id_]['QUESTION'],
+                    'source_context': ' '.join(dict_data_[id_]['CONTEXTS']),
+                    'target_answer': dict_data_[id_]['LONG_ANSWER'],
+                    'gold_label': 'maybe', # we do not use this label, this is placeholder for unlabeled data
+                    'id': id_,
+                }
 
-            if training_phase in ["phase-1", "phase-3"]:
-                if 'final_decision' in dict_data_[id_]:
-                    if not dict_data_[id_]['final_decision'] == '':
-                        instance['gold_label'] = dict_data_[id_]['final_decision']
-                        list_data.append(instance)
 
-            elif training_phase == "annotation":
-                instance['gold_label'] = 'maybe' # we do not use this label, this is placeholder for unlabeled data
-                list_data.append(instance)
 
-            elif training_phase == "phase-2":
-            
-                # try extracting final decision
-                try:
-                    final_decision = dict_data_[id_]['custom_label']
-                    if not final_decision == '':
-                        instance['gold_label'] = final_decision
-                        list_data.append(instance)
-                except:
-                    continue
-            
+            # try extracting final decision
+            try:
+                final_decision = dict_data_[id_]['custom_label']
+                if not final_decision == '':
+                    instance = {
+                        'source_question': dict_data_[id_]['QUESTION'],
+                        'source_context': ' '.join(dict_data_[id_]['CONTEXTS']),
+                        'target_answer': dict_data_[id_]['LONG_ANSWER'],
+                        'gold_label': final_decision,
+                        'id': id_,
+                    }
+                    list_data.append(instance)
+            except:
+                continue
+            """
+
         return list_data
 
     def get_list_data(
@@ -273,7 +264,7 @@ class QADataLoader():
             try:
                 final_decision = dict_data_['final_decision'][idx]
             except:
-                final_decision = 'maybe' # this is just an adjustment, we do not use these 'maybe' labels
+                final_decision = 'maybe'  # this is just an adjustment, we do not use these 'maybe' labels
 
             """
             # create data instance
@@ -284,7 +275,7 @@ class QADataLoader():
                 'gold_label': final_decision,
             }
             list_data.append(instance)
-            
+
             """
             if not final_decision in ['no label', 'maybe']:
                 # create data instance
@@ -295,17 +286,16 @@ class QADataLoader():
                     'gold_label': final_decision,
                 }
                 list_data.append(instance)
-            
 
         return list_data
-    
+
     def collation_f(
-        self,
-        batch,
-        source_pad_token_id, 
-        target_pad_token_id,
+            self,
+            batch,
+            source_pad_token_id,
+            target_pad_token_id,
     ):
-        
+
         input_ids_list = [ex["input_ids"] for ex in batch]
         attention_mask_list = [ex["attention_mask"] for ex in batch]
         decoder_input_ids_list = [ex["decoder_input_ids"] for ex in batch]
@@ -325,12 +315,12 @@ class QADataLoader():
         }
         collated_batch["attention_mask"] = collated_batch["input_ids"] != source_pad_token_id
 
-        return collated_batch 
-    
+        return collated_batch
+
     def pad(
-        self,
-        sequence_list, 
-        pad_id
+            self,
+            sequence_list,
+            pad_id
     ):
         """Pads sequence_list to the longest sequence in the batch with pad_id.
 
@@ -341,7 +331,7 @@ class QADataLoader():
         Returns:
             torch.LongTensor of shape [batch_size, max_sequence_len]
         """
-        max_len = 512#max(len(x) for x in sequence_list)
+        max_len = 512  # max(len(x) for x in sequence_list)
         padded_sequence_list = []
         for sequence in sequence_list:
             padding = [pad_id] * (max_len - len(sequence))
@@ -368,7 +358,7 @@ class QADataset(Dataset):
         self.label2id = label2id
         self.max_length = max_length
         self.data = list_data
-        #self.pad_token = self.tokenizer.vocab[self.tokenizer._pad_token]
+        # self.pad_token = self.tokenizer.vocab[self.tokenizer._pad_token]
         self.source_pad_token_id = self.source_tokenizer.pad_token_id
         self.target_pad_token_id = self.target_tokenizer.pad_token_id
 
@@ -378,9 +368,9 @@ class QADataset(Dataset):
 
     def __getitem__(self, i):
         """Return sample from dataset at index i."""
-        
+
         example = self.data[i]
-        
+
         # source sequence
         inputs = self.source_tokenizer.encode_plus(
             example['source_question'],
@@ -394,7 +384,7 @@ class QADataset(Dataset):
             if tok_id == self.source_pad_token_id:
                 break
         attention_mask[tok_idx:] = [0] * (self.max_length - tok_idx)
-        
+
         # target sequence
         targets = self.target_tokenizer.encode_plus(
             example['target_answer'],
@@ -408,13 +398,13 @@ class QADataset(Dataset):
             if tok_id == self.target_pad_token_id:
                 break
         decoder_attention_mask[tok_idx:] = [0] * (self.max_length - tok_idx)
-        
+
         #
         if 'id' in example:
             id_ = int(example['id'])
         else:
             id_ = -1
-        
+
         #
         return_dict = {
             'input_ids': inputs['input_ids'],
@@ -425,6 +415,5 @@ class QADataset(Dataset):
             'gold_label': [self.label2id[example['gold_label']]],
             'id': [id_],
         }
-        
 
         return return_dict

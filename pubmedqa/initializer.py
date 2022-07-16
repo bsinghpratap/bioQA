@@ -48,6 +48,11 @@ def parse_args():
         "--device",
         default=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     )
+    parser.add_argument(
+        "--cuda_device_index",
+        type=str,
+        default=3,
+    )
 
 
     # language model arguments
@@ -374,6 +379,9 @@ def main():
 
     # fix seed
     utils_f.fix_all_seed(args.fixed_seed_value)
+
+    # set device to use
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda_device_index
 
     # select the folds/seed to use
     selected_folds = utils_f.sample_folds(

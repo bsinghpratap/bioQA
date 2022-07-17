@@ -50,8 +50,8 @@ def parse_args():
     )
     parser.add_argument(
         "--cuda_device_index",
-        type=str,
-        default=str(3),
+        type=int,
+        default=3,
     )
 
 
@@ -382,7 +382,7 @@ def main():
     utils_f.fix_all_seed(args.fixed_seed_value)
 
     # set device to use
-    os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda_device_index
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(args.cuda_device_index)
 
     # select the folds/seed to use
     selected_folds = utils_f.sample_folds(

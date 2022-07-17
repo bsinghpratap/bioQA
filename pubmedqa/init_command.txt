@@ -1,5 +1,5 @@
 python initializer.py \
---path_data /Users/vijetadeshpande/Downloads/BioNLP\ Lab/Datasets/QA/pubmedqa/data \
+--path_data ./../../pubmedqa/data \
 --path_models ./results \
 --folds_sample_size 3 \
 --model_name prajjwal1/bert-tiny \
@@ -12,4 +12,13 @@ python initializer.py \
 --weight_decay 10 \
 --scheduler_warmup 0.2 \
 --wandb_project PubMedQA_tiny \
---debug True
+--cuda_device_index 3 \
+--debug False
+
+
+local path for data,
+/Users/vijetadeshpande/Downloads/BioNLP\ Lab/Datasets/QA/pubmedqa/data
+
+server path for data,
+./../../pubmedqa/data
+

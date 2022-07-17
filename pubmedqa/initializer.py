@@ -51,7 +51,7 @@ def parse_args():
     parser.add_argument(
         "--cuda_device_index",
         type=str,
-        default=3,
+        default=str(3),
     )
 
 
@@ -176,7 +176,8 @@ def init_training(
     #
     run = wandb.init(
         project=args.wandb_project,
-        config=args
+        config=args,
+        name=f"{training_phase}_fold{fold_idx}",
     )
 
     # dataloader

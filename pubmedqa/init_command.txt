@@ -1,9 +1,9 @@
 python initializer.py \
 --path_data ./../../pubmedqa/data \
---path_models ./results \
---folds_sample_size 3 \
---model_name prajjwal1/bert-tiny \
---tokenizer_name prajjwal1/bert-tiny \
+--path_models ./results_base_config \
+--folds_sample_size 1 \
+--model_name allenai/biomed_roberta_base \
+--tokenizer_name allenai/biomed_roberta_base \
 --batch_size 8 \
 --num_epochs 100 \
 --eval_every_steps 100 \
@@ -11,9 +11,9 @@ python initializer.py \
 --learning_rate 6e-6 \
 --weight_decay 10 \
 --scheduler_warmup 0.2 \
---wandb_project PubMedQA_tiny \
+--wandb_project final_experiments_base_config \
 --cuda_device_index 3 \
---debug False
+--debug False,
 
 
 local path for data,

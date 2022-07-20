@@ -1,0 +1,30 @@
+
+How do we use the data:
+
+The authors of the original paper used 500 examples out of the manually annotated instances for model development,
+keeping rest 500 for testing the model. Additionally, the authors also provide ten folds of training and validation data
+i.e. ten different combinations of training (450 examples) and validation (50 examples) examples, sampled out of the 500
+examples used for model development.
+
+In this study, we used f1-score on validation set to save the model checkpoint. As the size of validation set size
+is very small (50 examples), performance on validation set is unreliable for saving the model. Hence, we use three
+different folds, to train separate models and improve reliability of results of our experiments. We also treat
+multiple folds used as a proxy for using multiple seeds for random initialization.
+
+1. phase-1
+    In this phase we train a model on the manually labeled subset of the entire data. We treat this model as an
+    annotator i.e. we use this trained model to create labels for unlabeled dataset. Because we are using three
+    different folds of training and validation sets, we train three different annotators (say m_{phase-1, fold-0/1/2})
+    in first phase of model development. For every fold of training/validation data, checkpoint of language model
+    encoder, weights of the classifier and all hyperparameter values were set to be same. For every fold, we train
+    the model for 100 epochs with highest learning rate value of 6e-6. The learning rate value changes over 100
+    epochs according to the linear scheduler with a warm-up of 20% i.e. values of learning rate at 0th, 20th and 100th
+    epochs are 0, 6e-6, and 0, respectively. Batch size of eight and weight decay value of 10 were used for training
+    the model.
+
+    After training we save the final checkpoints and use the final checkpoints for annotating the unlabeled subset of
+    the data.
+
+2. Phase-2:
+
+

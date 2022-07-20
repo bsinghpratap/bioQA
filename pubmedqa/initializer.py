@@ -41,7 +41,7 @@ def parse_args():
     parser.add_argument(
         "--folds_sample_size",
         type=int,
-        default=3,
+        default=1,
         # required=True,
     )
     parser.add_argument(
@@ -71,7 +71,7 @@ def parse_args():
 
     # training arguments
     parser.add_argument(
-        "--fixed_seed_value",
+        "--num_seeds",
         type=int,
         default=3,
         help="A seed for reproducible training.",
@@ -148,7 +148,7 @@ def parse_args():
     parser.add_argument(
         "--debug",
         type=bool,
-        default=False,
+        default=True,
         help="when true, only 8 examples are selected to train model"
     )
 
@@ -239,7 +239,7 @@ def init_training(
         model_name=args.model_name,
         optimizer=optimizer,
         scheduler=scheduler,
-        num_epochs=args.num_epochs if training_phase in ["phase-1", "phase-3"] else 2,
+        num_epochs=args.num_epochs if training_phase in ["phase-1", "phase-3"] else 5,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         eval_every_steps=args.eval_every_steps,
         path_models=args.path_models,
@@ -378,16 +378,13 @@ def main():
     if not os.path.exists(args.path_models):
         os.makedirs(args.path_models)
 
-    # fix seed
-    utils_f.fix_all_seed(args.fixed_seed_value)
-
     # set device to use
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.cuda_device_index)
 
-    # select the folds/seed to use
+    # select the folds to use
     selected_folds = utils_f.sample_folds(
         path_data=args.path_data,
-        seed=args.fixed_seed_value,
+        seed=0,
         folds_total=args.folds_total,
         folds_sample_size=args.folds_sample_size
     )
@@ -400,21 +397,32 @@ def main():
 
     #
     for fold in selected_folds:
-        print("\n")
-        print("=" * 30)
-        print(f"\nStarting sequential training with the fold{fold} version of labeled data")
-        print("=" * 30)
-        print("\n")
-        args.fold_idx = fold
 
-        # phase-1
-        init_training("phase-1", fold, args)
+        # iterate over seed values
+        np.random.seed(0)
+        seeds = np.random.choice(10, size=args.num_seeds, replace=False).astype(int)
+        for seed in seeds:
+            args.fold_idx = fold
+            args.fixed_seed_value = seed
 
-        # phase-2
-        init_training("phase-2", fold, args)
+            # fix seed
+            utils_f.fix_all_seed(args.fixed_seed_value)
 
-        # phase-3
-        init_training("phase-3", fold, args)
+            #
+            print("\n")
+            print("=" * 30)
+            print(f"\nStarting sequential training with the fold{fold} version of labeled data and with seed value of {seed}")
+            print("=" * 30)
+            print("\n")
+
+            # phase-1
+            init_training("phase-1", fold, args)
+
+            # phase-2
+            init_training("phase-2", fold, args)
+
+            # phase-3
+            init_training("phase-3", fold, args)
 
     return
 

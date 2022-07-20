@@ -236,9 +236,9 @@ def train_(
                         os.path.join(path_models, f"{model_name.replace('/', '-')}_{training_phase}_fold{fold_idx}.pt")
                     )
 
-        #if debug:
-        #    if each_epoch > 3:
-        #        break
+        if debug:
+            if each_epoch > 3:
+                break
 
     # load the best model
     model.load_state_dict(
@@ -284,9 +284,9 @@ def label_data(
                 dict_results[str(id_)] = {'custom_label': preds[id_idx]}
 
             #
-            #if debug:
-            #    if batch_idx > 3:
-            #        break
+            if debug:
+                if batch_idx > 3:
+                    break
 
     # get distribution of predicted labels
     count = {}

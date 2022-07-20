@@ -148,7 +148,7 @@ def parse_args():
     parser.add_argument(
         "--debug",
         type=bool,
-        default=True,
+        default=False,
         help="when true, only 8 examples are selected to train model"
     )
 

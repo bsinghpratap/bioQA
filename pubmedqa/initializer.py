@@ -239,7 +239,7 @@ def init_training(
         model_name=args.model_name,
         optimizer=optimizer,
         scheduler=scheduler,
-        num_epochs=args.num_epochs if training_phase in ["phase-1", "phase-3"] else 5,
+        num_epochs=args.num_epochs if training_phase in ["phase-1", "phase-3"] else 3,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         eval_every_steps=args.eval_every_steps,
         path_models=args.path_models,

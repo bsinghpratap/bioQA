@@ -84,6 +84,7 @@ def annotate_with_model(
 def get_model(
         model_name: str,
         fold_idx: int,
+        fixed_seed_value: int,
         num_classes: int,
         class_dist: dict,
         training_phase: str,
@@ -105,9 +106,9 @@ def get_model(
             param.data = torch.tensor([class_dist['yes'], class_dist['no'], class_dist['maybe']]).float()
 
     if training_phase == "phase-3":
-        model.load_state_dict(torch.load(os.path.join(path_models, f"{model_name.replace('/', '-')}_phase-2_fold{fold_idx}.pt")))
+        model.load_state_dict(torch.load(os.path.join(path_models, f"{model_name.replace('/', '-')}_phase-2_fold{fold_idx}_seed{fixed_seed_value}.pt")))
     elif training_phase == "annotation":
-        model.load_state_dict(torch.load(os.path.join(path_models, f"{model_name.replace('/', '-')}_phase-1_fold{fold_idx}.pt")))
+        model.load_state_dict(torch.load(os.path.join(path_models, f"{model_name.replace('/', '-')}_phase-1_fold{fold_idx}_seed{fixed_seed_value}.pt")))
 
     model = model.to(device)
 

@@ -232,6 +232,7 @@ def init_training(
     best_model, last_epoch, last_training_step = trainer.train_(
         training_phase=training_phase,
         fold_idx=args.fold_idx,
+        fixed_seed_value=args.fixed_seed_value,
         train_loader=dataloaders.dataloader_train,
         val_loader=dataloaders.dataloader_validation,
         loss_fct=loss_fct,
@@ -334,6 +335,7 @@ def init_training(
         model = utils_f.get_model(
             model_name=args.model_name,
             fold_idx=args.fold_idx,
+            fixed_seed_value=args.fixed_seed_value,
             num_classes=args.num_classes,
             class_dist=args.class_dist,
             training_phase="annotation",

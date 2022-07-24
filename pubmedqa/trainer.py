@@ -122,6 +122,7 @@ def test_(
 def train_(
         training_phase,
         fold_idx,
+        fixed_seed_value,
         train_loader,
         val_loader,
         loss_fct,
@@ -233,7 +234,7 @@ def train_(
                     # save model
                     torch.save(
                         model.state_dict(),
-                        os.path.join(path_models, f"{model_name.replace('/', '-')}_{training_phase}_fold{fold_idx}.pt")
+                        os.path.join(path_models, f"{model_name.replace('/', '-')}_{training_phase}_fold{fold_idx}_seed{fixed_seed_value}.pt")
                     )
 
         #if debug:
@@ -243,7 +244,7 @@ def train_(
     # load the best model
     model.load_state_dict(
         torch.load(
-            os.path.join(path_models, f"{model_name.replace('/', '-')}_{training_phase}_fold{fold_idx}.pt")
+            os.path.join(path_models, f"{model_name.replace('/', '-')}_{training_phase}_fold{fold_idx}_seed{fixed_seed_value}.pt")
         )
     )
 

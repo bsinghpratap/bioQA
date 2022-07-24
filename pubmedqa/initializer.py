@@ -196,7 +196,7 @@ def init_training(
     model = utils_f.get_model(
         model_name=args.model_name,
         fold_idx=args.fold_idx,
-        fixed_seed_value=args.fixed_seed_vakue,
+        fixed_seed_value=args.fixed_seed_value,
         num_classes=args.num_classes,
         class_dist=args.class_dist,
         training_phase=training_phase,

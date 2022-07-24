@@ -398,7 +398,8 @@ def main():
     args.class_weights = class_weights
 
     #
-    for fold in selected_folds:
+    # @TODO: fold number is manually set to 7 for checking some things, remove when done
+    for fold in [7]:#selected_folds:
 
         # iterate over seed values
         np.random.seed(0)

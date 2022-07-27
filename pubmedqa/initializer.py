@@ -400,7 +400,7 @@ def main():
 
     #
     # @TODO: fold number is manually set to 7 for checking some things, remove when done
-    for fold in [7]:#selected_folds:
+    for fold in selected_folds:#[7]:
 
         # iterate over seed values
         np.random.seed(0)

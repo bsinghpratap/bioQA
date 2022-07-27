@@ -177,7 +177,7 @@ def init_training(
     run = wandb.init(
         project=args.wandb_project,
         config=args,
-        name=f"{training_phase}_fold{fold_idx}",
+        name=f"{training_phase}_fold{fold_idx}_seed{args.fixed_seed_value}",
     )
 
     # dataloader
@@ -188,7 +188,7 @@ def init_training(
         fixed_seed_value=args.fixed_seed_value,
         label2id=None,
         tokenizer_name=args.tokenizer_name,
-        batch_size=args.batch_size if training_phase in ["phase-1", "phase-3"] else 32,
+        batch_size=args.batch_size if training_phase in ["phase-1", "phase-3"] else 8,
         debug=args.debug,
     )
 
@@ -241,8 +241,8 @@ def init_training(
         model_name=args.model_name,
         optimizer=optimizer,
         scheduler=scheduler,
-        num_epochs=args.num_epochs if training_phase in ["phase-1", "phase-3"] else 3,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        num_epochs=args.num_epochs if training_phase in ["phase-1", "phase-3"] else 2,
+        gradient_accumulation_steps=args.gradient_accumulation_steps if training_phase in ["phase-1", "phase-3"] else 4,
         eval_every_steps=args.eval_every_steps,
         path_models=args.path_models,
         device=args.device,
@@ -349,7 +349,7 @@ def init_training(
             device=args.device,
             debug=args.debug,
         )
-        with open(os.path.join(args.path_models, f'ditribution_of_annotated_data_{fold_idx}.json'), 'w') as f:
+        with open(os.path.join(args.path_models, f'ditribution_of_model_annotated_data_fold{fold_idx}_seed{args.fixed_seed_value}.json'), 'w') as f:
             json.dump(dist_class, f, indent=4)
 
         #

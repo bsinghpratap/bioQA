@@ -225,7 +225,7 @@ def init_training(
         optimizer=optimizer,
         train_loader=dataloaders.dataloader_train,
         num_epochs=args.num_epochs,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        gradient_accumulation_steps=args.gradient_accumulation_steps if training_phase in ["phase-1", "phase-3"] else 16,
         scheduler_warmup=args.scheduler_warmup,
     )
 
@@ -242,7 +242,7 @@ def init_training(
         optimizer=optimizer,
         scheduler=scheduler,
         num_epochs=args.num_epochs if training_phase in ["phase-1", "phase-3"] else 2,
-        gradient_accumulation_steps=args.gradient_accumulation_steps if training_phase in ["phase-1", "phase-3"] else 4,
+        gradient_accumulation_steps=args.gradient_accumulation_steps if training_phase in ["phase-1", "phase-3"] else 16,
         eval_every_steps=args.eval_every_steps,
         path_models=args.path_models,
         device=args.device,

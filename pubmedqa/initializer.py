@@ -314,8 +314,8 @@ def init_training(
             path_models=args.path_models,
         )
 
-    # end the wandb run
-    run.finish()
+        # end the wandb run
+        run.finish()
 
     #
     if training_phase == "phase-1":

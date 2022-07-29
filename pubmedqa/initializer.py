@@ -174,106 +174,108 @@ def init_training(
     print("\n")
 
     #
-    run = wandb.init(
-        project=args.wandb_project,
-        config=args,
-        name=f"{training_phase}_fold{fold_idx}_seed{args.fixed_seed_value}",
-    )
+    # @TODO: following line is for continuing the experimetns from where we left. Remove when done.
+    if not ((int(args.fixed_seed_value) == 8) and (training_phase == 'phase-1')):
+        run = wandb.init(
+            project=args.wandb_project,
+            config=args,
+            name=f"{training_phase}_fold{fold_idx}_seed{args.fixed_seed_value}",
+        )
 
-    # dataloader
-    dataloaders = QADataLoader(
-        training_phase=training_phase,
-        fold_idx=args.fold_idx,
-        path_data=args.path_data,
-        fixed_seed_value=args.fixed_seed_value,
-        label2id=None,
-        tokenizer_name=args.tokenizer_name,
-        batch_size=args.batch_size if training_phase in ["phase-1", "phase-3"] else 8,
-        debug=args.debug,
-    )
+        # dataloader
+        dataloaders = QADataLoader(
+            training_phase=training_phase,
+            fold_idx=args.fold_idx,
+            path_data=args.path_data,
+            fixed_seed_value=args.fixed_seed_value,
+            label2id=None,
+            tokenizer_name=args.tokenizer_name,
+            batch_size=args.batch_size if training_phase in ["phase-1", "phase-3"] else 8,
+            debug=args.debug,
+        )
 
-    # model
-    model = utils_f.get_model(
-        model_name=args.model_name,
-        fold_idx=args.fold_idx,
-        fixed_seed_value=args.fixed_seed_value,
-        num_classes=args.num_classes,
-        class_dist=args.class_dist,
-        training_phase=training_phase,
-        path_models=args.path_models,
-        device=args.device,
-    )
+        # model
+        model = utils_f.get_model(
+            model_name=args.model_name,
+            fold_idx=args.fold_idx,
+            fixed_seed_value=args.fixed_seed_value,
+            num_classes=args.num_classes,
+            class_dist=args.class_dist,
+            training_phase=training_phase,
+            path_models=args.path_models,
+            device=args.device,
+        )
 
-    # objective function
-    loss_fct = utils_f.get_loss_function(
-        class_weights=args.class_weights,
-        id2label=dataloaders.id2label,
-        device=args.device,
-    )
+        # objective function
+        loss_fct = utils_f.get_loss_function(
+            class_weights=args.class_weights,
+            id2label=dataloaders.id2label,
+            device=args.device,
+        )
 
-    # solution method
-    optimizer = utils_f.get_optimizer(
-        model=model,
-        no_decay_layers=args.no_decay_layers,
-        learning_rate=args.learning_rate,
-        weight_decay=args.weight_decay,
-        adam_epsilon=args.adam_epsilon,
-    )
+        # solution method
+        optimizer = utils_f.get_optimizer(
+            model=model,
+            no_decay_layers=args.no_decay_layers,
+            learning_rate=args.learning_rate,
+            weight_decay=args.weight_decay,
+            adam_epsilon=args.adam_epsilon,
+        )
 
-    # learning rate scheduler
-    scheduler = utils_f.get_lr_scheduler(
-        optimizer=optimizer,
-        train_loader=dataloaders.dataloader_train,
-        num_epochs=args.num_epochs,
-        gradient_accumulation_steps=args.gradient_accumulation_steps if training_phase in ["phase-1", "phase-3"] else 16,
-        scheduler_warmup=args.scheduler_warmup,
-    )
+        # learning rate scheduler
+        scheduler = utils_f.get_lr_scheduler(
+            optimizer=optimizer,
+            train_loader=dataloaders.dataloader_train,
+            num_epochs=args.num_epochs,
+            gradient_accumulation_steps=args.gradient_accumulation_steps if training_phase in ["phase-1", "phase-3"] else 16,
+            scheduler_warmup=args.scheduler_warmup,
+        )
 
-    # train
-    best_model, last_epoch, last_training_step = trainer.train_(
-        training_phase=training_phase,
-        fold_idx=args.fold_idx,
-        fixed_seed_value=args.fixed_seed_value,
-        train_loader=dataloaders.dataloader_train,
-        val_loader=dataloaders.dataloader_validation,
-        loss_fct=loss_fct,
-        model=model,
-        model_name=args.model_name,
-        optimizer=optimizer,
-        scheduler=scheduler,
-        num_epochs=args.num_epochs if training_phase in ["phase-1", "phase-3"] else 2,
-        gradient_accumulation_steps=args.gradient_accumulation_steps if training_phase in ["phase-1", "phase-3"] else 16,
-        eval_every_steps=args.eval_every_steps,
-        path_models=args.path_models,
-        device=args.device,
-        label2id=dataloaders.label2id,
-        debug=args.debug,
-    )
+        # train
+        best_model, last_epoch, last_training_step = trainer.train_(
+            training_phase=training_phase,
+            fold_idx=args.fold_idx,
+            fixed_seed_value=args.fixed_seed_value,
+            train_loader=dataloaders.dataloader_train,
+            val_loader=dataloaders.dataloader_validation,
+            loss_fct=loss_fct,
+            model=model,
+            model_name=args.model_name,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            num_epochs=args.num_epochs if training_phase in ["phase-1", "phase-3"] else 2,
+            gradient_accumulation_steps=args.gradient_accumulation_steps if training_phase in ["phase-1", "phase-3"] else 16,
+            eval_every_steps=args.eval_every_steps,
+            path_models=args.path_models,
+            device=args.device,
+            label2id=dataloaders.label2id,
+            debug=args.debug,
+        )
 
-    #
-    print("\n")
-    print("=" * 30)
-    print(f"\nStarting testing of {training_phase} model")
-    print("=" * 30)
-    print("\n")
+        #
+        print("\n")
+        print("=" * 30)
+        print(f"\nStarting testing of {training_phase} model")
+        print("=" * 30)
+        print("\n")
 
-    # test
-    best_test_result = trainer.test_(
-        model=best_model,
-        test_loader=dataloaders.dataloader_test,
-        loss_fct=loss_fct,
-        label2id=dataloaders.label2id,
-        epoch=last_epoch,
-        global_step=last_training_step,
-        device=args.device,
-    )
-    utils_f.save_test_performance_results(
-        results=best_test_result,
-        model_name=args.model_name,
-        training_phase=training_phase,
-        fold_idx=fold_idx,
-        path_models=args.path_models,
-    )
+        # test
+        best_test_result = trainer.test_(
+            model=best_model,
+            test_loader=dataloaders.dataloader_test,
+            loss_fct=loss_fct,
+            label2id=dataloaders.label2id,
+            epoch=last_epoch,
+            global_step=last_training_step,
+            device=args.device,
+        )
+        utils_f.save_test_performance_results(
+            results=best_test_result,
+            model_name=args.model_name,
+            training_phase=training_phase,
+            fold_idx=fold_idx,
+            path_models=args.path_models,
+        )
 
     #
     if training_phase == "phase-2":
@@ -408,6 +410,10 @@ def main():
         for seed in seeds:
             args.fold_idx = fold
             args.fixed_seed_value = seed
+
+            # @TODO: following line is to ensure we don't repeat what has already been done. Remove when done.
+            if seed == 2:
+                continue
 
             # fix seed
             utils_f.fix_all_seed(args.fixed_seed_value)

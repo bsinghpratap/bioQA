@@ -412,7 +412,7 @@ def main():
             args.fixed_seed_value = seed
 
             # @TODO: following line is to ensure we don't repeat what has already been done. Remove when done.
-            if seed == 2:
+            if seed in [2, 8]:
                 continue
 
             # fix seed
